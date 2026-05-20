@@ -1,0 +1,8 @@
+# Build artifacts
+build/
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
