@@ -1,8 +1,12 @@
 # Build artifacts
-build/
+/build/
 
 # IDE
 .idea/
 
 # OS
 .DS_Store
+
+# vendor
+third_party/
+/third_party/
