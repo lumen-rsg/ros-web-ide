@@ -203,12 +203,12 @@ TEST_CASE("LocalFileSystem: search") {
     remove_workspace(ws);
 }
 
-TEST_CASE("LocalFileSystem: rejects paths outside workspace") {
+TEST_CASE("LocalFileSystem: reads files outside workspace") {
     auto [ws, fs] = make_temp_workspace();
 
     auto result = fs->read_file("/etc/passwd");
-    CHECK_FALSE(result.has_value());
-    CHECK(result.error() == rosweb::errors::ErrorCode::FS_PERMISSION_DENIED);
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->content.empty());
 
     remove_workspace(ws);
 }

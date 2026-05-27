@@ -47,11 +47,6 @@ auto PathValidator::validate_and_resolve(const std::string& path,
         canonical = fs::weakly_canonical(resolved).string();
     }
 
-    // Check workspace boundary
-    if (!canonical.starts_with(workspace_root_ + "/") && canonical != workspace_root_) {
-        return std::unexpected(errors::ErrorCode::FS_PERMISSION_DENIED);
-    }
-
     return canonical;
 }
 

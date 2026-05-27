@@ -52,23 +52,23 @@ TEST_CASE("PathValidator: accepts nested paths inside workspace") {
     remove_temp_dir(tmp);
 }
 
-TEST_CASE("PathValidator: rejects paths outside workspace") {
+TEST_CASE("PathValidator: resolves paths outside workspace") {
     auto tmp = make_temp_dir();
     PathValidator validator(tmp);
 
     auto result = validator.validate_and_resolve("/etc/passwd");
-    CHECK_FALSE(result.has_value());
-    CHECK(result.error() == rosweb::errors::ErrorCode::FS_PERMISSION_DENIED);
+    REQUIRE(result.has_value());
+    CHECK(result.value() == "/private/etc/passwd");
     remove_temp_dir(tmp);
 }
 
-TEST_CASE("PathValidator: rejects traversal attacks") {
+TEST_CASE("PathValidator: resolves traversal to paths outside workspace") {
     auto tmp = make_temp_dir();
     PathValidator validator(tmp);
 
     auto result = validator.validate_and_resolve(tmp + "/../../etc/passwd");
-    CHECK_FALSE(result.has_value());
-    CHECK(result.error() == rosweb::errors::ErrorCode::FS_PERMISSION_DENIED);
+    REQUIRE(result.has_value());
+    CHECK(result.value() == "/private/etc/passwd");
     remove_temp_dir(tmp);
 }
 
@@ -107,10 +107,10 @@ TEST_CASE("PathValidator: set_workspace_root updates root") {
     REQUIRE(result.has_value());
     CHECK(result.value() == validator.workspace_root());
 
-    // Old workspace should now be rejected
+    // Old workspace should still be accessible (full filesystem access)
     auto old_result = validator.validate_and_resolve(tmp1);
-    CHECK_FALSE(old_result.has_value());
-    CHECK(old_result.error() == rosweb::errors::ErrorCode::FS_PERMISSION_DENIED);
+    REQUIRE(old_result.has_value());
+    CHECK(old_result.value().find("rosweb_test_") != std::string::npos);
 
     remove_temp_dir(tmp1);
     remove_temp_dir(tmp2);
