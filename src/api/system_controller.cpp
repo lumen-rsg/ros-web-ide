@@ -17,7 +17,7 @@ namespace rosweb::api {
 SystemController::SystemController(std::shared_ptr<system::ISystemInfo> system_info)
     : system_info_(std::move(system_info)) {}
 
-void SystemController::register_routes(crow::SimpleApp& app) {
+void SystemController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/system/info")
     ([this](const crow::request& req) {
         return try_handle("GET /system/info", [&] { return handle_get_system_info(req); });

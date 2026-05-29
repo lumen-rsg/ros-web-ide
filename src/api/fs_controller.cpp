@@ -19,7 +19,7 @@ FsController::FsController(std::shared_ptr<fs::IFileSystem> filesystem,
                            std::shared_ptr<fs::PathValidator> validator)
     : fs_(std::move(filesystem)), validator_(std::move(validator)) {}
 
-void FsController::register_routes(crow::SimpleApp& app) {
+void FsController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/fs/tree")
     ([this](const crow::request& req) {
         return try_handle("GET /fs/tree", [&] { return handle_get_tree(req); });

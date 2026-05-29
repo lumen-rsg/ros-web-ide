@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include <crow/middlewares/cors.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -14,7 +15,7 @@ class BuildController {
 public:
     explicit BuildController(std::shared_ptr<build::IBuildManager> build_manager);
 
-    void register_routes(crow::SimpleApp& app);
+    void register_routes(crow::App<crow::CORSHandler>& app);
 
 private:
     std::shared_ptr<build::IBuildManager> build_manager_;

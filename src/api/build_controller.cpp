@@ -31,7 +31,7 @@ namespace rosweb::api {
 BuildController::BuildController(std::shared_ptr<build::IBuildManager> build_manager)
     : build_manager_(std::move(build_manager)) {}
 
-void BuildController::register_routes(crow::SimpleApp& app) {
+void BuildController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/build").methods("POST"_method)
     ([this](const crow::request& req) {
         return try_handle("POST /build", [&] { return handle_start_build(req); });

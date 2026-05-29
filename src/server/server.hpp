@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include <crow/middlewares/cors.h>
 #include <memory>
 #include <string>
 
@@ -44,7 +45,7 @@ public:
     void start(uint16_t port = 8080);
 
 private:
-    crow::SimpleApp app_;
+    crow::App<crow::CORSHandler> app_;
     std::shared_ptr<fs::PathValidator> validator_;
     std::shared_ptr<fs::IFileSystem> filesystem_;
     std::shared_ptr<system::ISystemInfo> system_info_;

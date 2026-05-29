@@ -7,7 +7,7 @@ WsController::WsController(std::unique_ptr<ws::WsRouter> router)
 
 WsController::~WsController() = default;
 
-void WsController::register_routes(crow::SimpleApp& app) {
+void WsController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_WEBSOCKET_ROUTE(app, "/ws")
         .onopen([this](crow::websocket::connection& conn) {
             router_->on_open(conn);

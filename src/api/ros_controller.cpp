@@ -28,7 +28,7 @@ auto ros_unwrap(std::expected<T, errors::ErrorCode> result, const std::string& c
 RosController::RosController(std::shared_ptr<ros::IRosManager> ros_manager)
     : ros_manager_(std::move(ros_manager)) {}
 
-void RosController::register_routes(crow::SimpleApp& app) {
+void RosController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/ros/nodes")
     ([this](const crow::request& req) {
         return try_handle("GET /ros/nodes", [&] { return handle_list_nodes(req); });

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include <crow/middlewares/cors.h>
 #include <memory>
 #include <string>
 
@@ -14,7 +15,7 @@ public:
     FsController(std::shared_ptr<fs::IFileSystem> filesystem,
                  std::shared_ptr<fs::PathValidator> validator);
 
-    void register_routes(crow::SimpleApp& app);
+    void register_routes(crow::App<crow::CORSHandler>& app);
 
 private:
     std::shared_ptr<fs::IFileSystem> fs_;

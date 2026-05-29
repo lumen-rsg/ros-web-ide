@@ -1,6 +1,7 @@
 #pragma once
 
 #include <crow.h>
+#include <crow/middlewares/cors.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -14,7 +15,7 @@ class RosController {
 public:
     explicit RosController(std::shared_ptr<ros::IRosManager> ros_manager);
 
-    void register_routes(crow::SimpleApp& app);
+    void register_routes(crow::App<crow::CORSHandler>& app);
 
 private:
     std::shared_ptr<ros::IRosManager> ros_manager_;

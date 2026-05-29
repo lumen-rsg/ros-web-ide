@@ -21,7 +21,7 @@ WorkspaceController::WorkspaceController(std::shared_ptr<fs::PathValidator> vali
                                          std::shared_ptr<fs::IFileSystem> filesystem)
     : validator_(std::move(validator)), fs_(std::move(filesystem)) {}
 
-void WorkspaceController::register_routes(crow::SimpleApp& app) {
+void WorkspaceController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/workspace")
     ([this](const crow::request& req) {
         return try_handle("GET /workspace", [&] { return handle_get_workspace(req); });
