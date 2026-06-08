@@ -168,6 +168,7 @@ void from_json(const nlohmann::json& j, BuildRequest& r) {
 }
 
 void from_json(const nlohmann::json& j, LaunchRequest& r) {
+    j.at("package").get_to(r.package);
     j.at("file").get_to(r.file);
     if (j.contains("arguments") && !j["arguments"].is_null()) {
         r.arguments = j["arguments"].get<std::map<std::string, std::string>>();

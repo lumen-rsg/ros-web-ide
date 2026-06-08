@@ -65,7 +65,7 @@ auto LocalBuildManager::build_colcon_command(const models::BuildRequest& request
 
 auto LocalBuildManager::build_launch_command(const models::LaunchRequest& request) const
     -> std::vector<std::string> {
-    std::vector<std::string> cmd = {"ros2", "launch", request.file};
+    std::vector<std::string> cmd = {"ros2", "launch", request.package, request.file};
     if (request.arguments) {
         for (const auto& [key, value] : *request.arguments) {
             cmd.push_back(key + ":=" + value);

@@ -174,19 +174,22 @@ TEST_SUITE("BuildModels") {
 
     TEST_CASE("LaunchRequest from_json with arguments") {
         auto j = nlohmann::json::parse(R"({
-            "file": "/ws/demo.launch.py",
+            "package": "my_pkg",
+            "file": "demo.launch.py",
             "arguments": {"use_sim": "true"}
         })");
         auto req = j.get<LaunchRequest>();
-        CHECK(req.file == "/ws/demo.launch.py");
+        CHECK(req.package == "my_pkg");
+        CHECK(req.file == "demo.launch.py");
         REQUIRE(req.arguments.has_value());
         CHECK(req.arguments->at("use_sim") == "true");
     }
 
     TEST_CASE("LaunchRequest from_json without arguments") {
-        auto j = nlohmann::json::parse(R"({"file": "/ws/demo.launch.py"})");
+        auto j = nlohmann::json::parse(R"({"package": "my_pkg", "file": "demo.launch.py"})");
         auto req = j.get<LaunchRequest>();
-        CHECK(req.file == "/ws/demo.launch.py");
+        CHECK(req.package == "my_pkg");
+        CHECK(req.file == "demo.launch.py");
         CHECK(!req.arguments.has_value());
     }
 

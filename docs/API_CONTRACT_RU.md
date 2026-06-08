@@ -606,7 +606,8 @@ WebSocket:  ws://{host}:{port}/ws
 
 ```jsonc
 {
-  "file": "/home/user/ros_ws/src/my_pkg/launch/demo.launch.py",
+  "package": "my_pkg",
+  "file": "demo.launch.py",
   "arguments": {                // опционально — аргументы запуска как пары ключ-значение
     "use_sim": "true"
   }

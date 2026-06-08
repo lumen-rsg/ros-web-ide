@@ -606,7 +606,8 @@ Launch a ROS2 launch file.
 
 ```jsonc
 {
-  "file": "/home/user/ros_ws/src/my_pkg/launch/demo.launch.py",
+  "package": "my_pkg",
+  "file": "demo.launch.py",
   "arguments": {                // optional — launch arguments as key-value pairs
     "use_sim": "true"
   }

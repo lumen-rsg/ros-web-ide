@@ -21,6 +21,7 @@ struct BuildRequest {
 };
 
 struct LaunchRequest {
+    std::string package;
     std::string file;
     std::optional<std::map<std::string, std::string>> arguments;
 };

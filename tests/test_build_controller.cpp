@@ -138,20 +138,21 @@ TEST_SUITE("BuildController") {
 
     TEST_CASE("start_launch success") {
         auto mock = std::make_shared<MockBuildManager>();
-        auto j = nlohmann::json::parse(R"({"file": "/demo.launch.py", "arguments": {"x": "1"}})");
+        auto j = nlohmann::json::parse(R"({"package": "my_pkg", "file": "demo.launch.py", "arguments": {"x": "1"}})");
         auto req = j.get<rosweb::models::LaunchRequest>();
 
         auto result = mock->start_launch(req);
         REQUIRE(result.has_value());
         CHECK(result->launch_id == "l_mock_1");
         CHECK(result->pid == 9999);
-        CHECK(mock->last_launch_request.file == "/demo.launch.py");
+        CHECK(mock->last_launch_request.package == "my_pkg");
+        CHECK(mock->last_launch_request.file == "demo.launch.py");
     }
 
     TEST_CASE("start_launch failure returns LAUNCH_FAILED") {
         auto mock = std::make_shared<MockBuildManager>();
         mock->should_fail_launch = true;
-        auto result = mock->start_launch(rosweb::models::LaunchRequest{.file = "/x.launch.py"});
+        auto result = mock->start_launch(rosweb::models::LaunchRequest{.package = "pkg", .file = "x.launch.py"});
         CHECK(!result.has_value());
         CHECK(result.error() == rosweb::errors::ErrorCode::LAUNCH_FAILED);
     }
