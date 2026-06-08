@@ -237,13 +237,16 @@ auto SubprocessExecutor::start_streaming(const std::vector<std::string>& args,
                 ssize_t ignored [[maybe_unused]] = ::write(raw->shutdown_pipe[1], &c, 1);
             }
 
-            if (raw->stdout_reader.joinable()) raw->stdout_reader.join();
-            if (raw->stderr_reader.joinable()) raw->stderr_reader.join();
+            // Only one path (us or stop_streaming) should join/close/reap
+            if (!raw->cleaned.exchange(true)) {
+                if (raw->stdout_reader.joinable()) raw->stdout_reader.join();
+                if (raw->stderr_reader.joinable()) raw->stderr_reader.join();
 
-            if (raw->stdout_pipe[0] >= 0) ::close(raw->stdout_pipe[0]);
-            if (raw->stderr_pipe[0] >= 0) ::close(raw->stderr_pipe[0]);
-            if (raw->shutdown_pipe[0] >= 0) ::close(raw->shutdown_pipe[0]);
-            if (raw->shutdown_pipe[1] >= 0) ::close(raw->shutdown_pipe[1]);
+                if (raw->stdout_pipe[0] >= 0) ::close(raw->stdout_pipe[0]);
+                if (raw->stderr_pipe[0] >= 0) ::close(raw->stderr_pipe[0]);
+                if (raw->shutdown_pipe[0] >= 0) ::close(raw->shutdown_pipe[0]);
+                if (raw->shutdown_pipe[1] >= 0) ::close(raw->shutdown_pipe[1]);
+            }
 
             cb(exit_code);
         }).detach();
@@ -270,18 +273,21 @@ auto SubprocessExecutor::stop_streaming(std::unique_ptr<StreamingHandle> handle)
         ssize_t ignored [[maybe_unused]] = ::write(handle->shutdown_pipe[1], &c, 1);
     }
 
-    if (handle->stdout_reader.joinable()) handle->stdout_reader.join();
-    if (handle->stderr_reader.joinable()) handle->stderr_reader.join();
+    // Only one path (exit-waiter or us) should join/close/reap
+    if (!handle->cleaned.exchange(true)) {
+        if (handle->stdout_reader.joinable()) handle->stdout_reader.join();
+        if (handle->stderr_reader.joinable()) handle->stderr_reader.join();
 
-    // Close fds
-    if (handle->stdout_pipe[0] >= 0) ::close(handle->stdout_pipe[0]);
-    if (handle->stderr_pipe[0] >= 0) ::close(handle->stderr_pipe[0]);
-    if (handle->shutdown_pipe[0] >= 0) ::close(handle->shutdown_pipe[0]);
-    if (handle->shutdown_pipe[1] >= 0) ::close(handle->shutdown_pipe[1]);
+        // Close fds
+        if (handle->stdout_pipe[0] >= 0) ::close(handle->stdout_pipe[0]);
+        if (handle->stderr_pipe[0] >= 0) ::close(handle->stderr_pipe[0]);
+        if (handle->shutdown_pipe[0] >= 0) ::close(handle->shutdown_pipe[0]);
+        if (handle->shutdown_pipe[1] >= 0) ::close(handle->shutdown_pipe[1]);
 
-    // Reap child
-    int status = 0;
-    ::waitpid(handle->pid, &status, 0);
+        // Reap child
+        int status = 0;
+        ::waitpid(handle->pid, &status, 0);
+    }
 
     // unique_ptr destructor cleans up
 }

@@ -28,6 +28,7 @@ struct StreamingHandle {
     std::thread stdout_reader;
     std::thread stderr_reader;
     std::atomic<bool> running{false};
+    std::atomic<bool> cleaned{false};  // guards against double-join / double-close
 };
 
 }  // namespace rosweb::subprocess

@@ -49,8 +49,15 @@ auto LocalRosStreamManager::subscribe_topic(
     };
     callbacks.on_stderr = [](std::string_view) {};
     callbacks.on_exit = [self, topic_copy](int) {
-        // Stream ended unexpectedly
-        self->stop_topic_stream(topic_copy);
+        // Stream ended unexpectedly — just clean up maps
+        // (handle cleanup is done by the exit-waiter or stop_streaming)
+        std::lock_guard lock(self->topics_mutex_);
+        auto it = self->topic_streams_.find(topic_copy);
+        if (it == self->topic_streams_.end()) return;
+        for (const auto& sub_id : it->second.subscription_ids) {
+            self->subscriptions_.erase(sub_id);
+        }
+        self->topic_streams_.erase(it);
     };
 
     auto handle = executor_.start_streaming(
@@ -116,41 +123,55 @@ void LocalRosStreamManager::handle_topic_stdout(const std::string& topic,
 
 auto LocalRosStreamManager::unsubscribe_topic(const std::string& subscription_id)
     -> std::expected<void, errors::ErrorCode> {
-    std::lock_guard lock(topics_mutex_);
+    std::unique_ptr<subprocess::StreamingHandle> handle_to_stop;
 
-    auto sub_it = subscriptions_.find(subscription_id);
-    if (sub_it == subscriptions_.end()) {
-        return std::unexpected(errors::ErrorCode::SUBSCRIPTION_NOT_FOUND);
+    {
+        std::lock_guard lock(topics_mutex_);
+
+        auto sub_it = subscriptions_.find(subscription_id);
+        if (sub_it == subscriptions_.end()) {
+            return std::unexpected(errors::ErrorCode::SUBSCRIPTION_NOT_FOUND);
+        }
+
+        std::string topic = sub_it->second.topic;
+        subscriptions_.erase(sub_it);
+
+        auto stream_it = topic_streams_.find(topic);
+        if (stream_it != topic_streams_.end()) {
+            auto& ids = stream_it->second.subscription_ids;
+            ids.erase(std::remove(ids.begin(), ids.end(), subscription_id), ids.end());
+            if (ids.empty()) {
+                handle_to_stop = std::move(stream_it->second.handle);
+                topic_streams_.erase(stream_it);
+            }
+        }
     }
 
-    std::string topic = sub_it->second.topic;
-    subscriptions_.erase(sub_it);
-
-    auto stream_it = topic_streams_.find(topic);
-    if (stream_it != topic_streams_.end()) {
-        auto& ids = stream_it->second.subscription_ids;
-        ids.erase(std::remove(ids.begin(), ids.end(), subscription_id), ids.end());
-        if (ids.empty()) {
-            stop_topic_stream(topic);
-        }
+    if (handle_to_stop) {
+        subprocess::SubprocessExecutor::stop_streaming(std::move(handle_to_stop));
     }
 
     return {};
 }
 
 void LocalRosStreamManager::stop_topic_stream(const std::string& topic) {
-    // Must be called with topics_mutex_ held
-    auto it = topic_streams_.find(topic);
-    if (it == topic_streams_.end()) return;
+    std::unique_ptr<subprocess::StreamingHandle> handle;
 
-    for (const auto& sub_id : it->second.subscription_ids) {
-        subscriptions_.erase(sub_id);
+    {
+        std::lock_guard lock(topics_mutex_);
+        auto it = topic_streams_.find(topic);
+        if (it == topic_streams_.end()) return;
+
+        for (const auto& sub_id : it->second.subscription_ids) {
+            subscriptions_.erase(sub_id);
+        }
+        handle = std::move(it->second.handle);
+        topic_streams_.erase(it);
     }
-    if (it->second.handle) {
-        subprocess::SubprocessExecutor::stop_streaming(
-            std::move(it->second.handle));
+
+    if (handle) {
+        subprocess::SubprocessExecutor::stop_streaming(std::move(handle));
     }
-    topic_streams_.erase(it);
 }
 
 // --- Publish topic ---
@@ -303,20 +324,23 @@ void LocalRosStreamManager::handle_action_stdout(const std::string& call_id,
 
 auto LocalRosStreamManager::cancel_action(const std::string& call_id)
     -> std::expected<void, errors::ErrorCode> {
-    std::lock_guard lock(actions_mutex_);
+    std::unique_ptr<subprocess::StreamingHandle> handle;
 
-    auto it = action_calls_.find(call_id);
-    if (it == action_calls_.end()) {
-        return std::unexpected(errors::ErrorCode::ACTION_NOT_FOUND);
+    {
+        std::lock_guard lock(actions_mutex_);
+        auto it = action_calls_.find(call_id);
+        if (it == action_calls_.end()) {
+            return std::unexpected(errors::ErrorCode::ACTION_NOT_FOUND);
+        }
+
+        notify_action_result(call_id, "cancelled", std::nullopt);
+        handle = std::move(it->second.handle);
+        action_calls_.erase(it);
     }
 
-    notify_action_result(call_id, "cancelled", std::nullopt);
-
-    if (it->second.handle) {
-        subprocess::SubprocessExecutor::stop_streaming(
-            std::move(it->second.handle));
+    if (handle) {
+        subprocess::SubprocessExecutor::stop_streaming(std::move(handle));
     }
-    action_calls_.erase(it);
     return {};
 }
 
@@ -376,21 +400,25 @@ auto LocalRosStreamManager::start_bag(
 
 auto LocalRosStreamManager::stop_bag(const std::string& bag_id)
     -> std::expected<void, errors::ErrorCode> {
-    std::lock_guard lock(bags_mutex_);
+    std::unique_ptr<subprocess::StreamingHandle> handle;
+    double duration = 0.0;
 
-    auto it = bag_recordings_.find(bag_id);
-    if (it == bag_recordings_.end()) {
-        return std::unexpected(errors::ErrorCode::BAG_NOT_RECORDING);
+    {
+        std::lock_guard lock(bags_mutex_);
+        auto it = bag_recordings_.find(bag_id);
+        if (it == bag_recordings_.end()) {
+            return std::unexpected(errors::ErrorCode::BAG_NOT_RECORDING);
+        }
+
+        auto elapsed = std::chrono::steady_clock::now() - it->second.start_time;
+        duration = std::chrono::duration<double>(elapsed).count();
+        handle = std::move(it->second.handle);
+        bag_recordings_.erase(it);
     }
 
-    auto elapsed = std::chrono::steady_clock::now() - it->second.start_time;
-    double duration = std::chrono::duration<double>(elapsed).count();
-
-    if (it->second.handle) {
-        subprocess::SubprocessExecutor::stop_streaming(
-            std::move(it->second.handle));
+    if (handle) {
+        subprocess::SubprocessExecutor::stop_streaming(std::move(handle));
     }
-    bag_recordings_.erase(it);
 
     notify_bag_status(bag_id, "stopped",
         duration, std::nullopt, std::nullopt);
@@ -473,37 +501,46 @@ auto LocalRosStreamManager::shutdown() -> void {
     stop_node_monitor();
 
     {
-        std::lock_guard lock(topics_mutex_);
-        for (auto& [topic, stream] : topic_streams_) {
-            if (stream.handle) {
-                subprocess::SubprocessExecutor::stop_streaming(
-                    std::move(stream.handle));
+        std::vector<std::unique_ptr<subprocess::StreamingHandle>> handles;
+        {
+            std::lock_guard lock(topics_mutex_);
+            for (auto& [topic, stream] : topic_streams_) {
+                handles.push_back(std::move(stream.handle));
             }
+            topic_streams_.clear();
+            subscriptions_.clear();
         }
-        topic_streams_.clear();
-        subscriptions_.clear();
+        for (auto& h : handles) {
+            if (h) subprocess::SubprocessExecutor::stop_streaming(std::move(h));
+        }
     }
 
     {
-        std::lock_guard lock(actions_mutex_);
-        for (auto& [id, ac] : action_calls_) {
-            if (ac.handle) {
-                subprocess::SubprocessExecutor::stop_streaming(
-                    std::move(ac.handle));
+        std::vector<std::unique_ptr<subprocess::StreamingHandle>> handles;
+        {
+            std::lock_guard lock(actions_mutex_);
+            for (auto& [id, ac] : action_calls_) {
+                handles.push_back(std::move(ac.handle));
             }
+            action_calls_.clear();
         }
-        action_calls_.clear();
+        for (auto& h : handles) {
+            if (h) subprocess::SubprocessExecutor::stop_streaming(std::move(h));
+        }
     }
 
     {
-        std::lock_guard lock(bags_mutex_);
-        for (auto& [id, rec] : bag_recordings_) {
-            if (rec.handle) {
-                subprocess::SubprocessExecutor::stop_streaming(
-                    std::move(rec.handle));
+        std::vector<std::unique_ptr<subprocess::StreamingHandle>> handles;
+        {
+            std::lock_guard lock(bags_mutex_);
+            for (auto& [id, rec] : bag_recordings_) {
+                handles.push_back(std::move(rec.handle));
             }
+            bag_recordings_.clear();
         }
-        bag_recordings_.clear();
+        for (auto& h : handles) {
+            if (h) subprocess::SubprocessExecutor::stop_streaming(std::move(h));
+        }
     }
 }
 
