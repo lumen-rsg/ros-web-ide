@@ -56,8 +56,11 @@ auto LocalFileWatchManager::watch(const std::string& watch_id,
     auto existing = watches_.find(watch_id);
     if (existing != watches_.end()) {
 #ifdef LINUX
-        if (existing->second.wd >= 0 && inotify_fd_ >= 0) {
-            ::inotify_rm_watch(inotify_fd_, existing->second.wd);
+        for (int wd : existing->second.wds) {
+            if (wd >= 0 && inotify_fd_ >= 0) {
+                ::inotify_rm_watch(inotify_fd_, wd);
+                wd_map_.erase(wd);
+            }
         }
 #endif
 #ifdef MACOS
@@ -74,19 +77,29 @@ auto LocalFileWatchManager::watch(const std::string& watch_id,
     entry.path = path;
     entry.recursive = recursive;
 
+    // Store entry first so add_recursive_watches can find it
+    watches_.emplace(watch_id, std::move(entry));
+
 #ifdef LINUX
     if (inotify_fd_ >= 0) {
-        uint32_t mask = IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO;
-        if (recursive) mask |= IN_ISDIR;
-        entry.wd = ::inotify_add_watch(inotify_fd_, path.c_str(), mask);
-        if (entry.wd < 0) {
-            return std::unexpected(errors::ErrorCode::FS_PERMISSION_DENIED);
+        if (recursive) {
+            // Walk directory tree and add watches for all subdirectories
+            add_recursive_watches(watch_id, path);
+        } else {
+            uint32_t mask = IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO;
+            int wd = ::inotify_add_watch(inotify_fd_, path.c_str(), mask);
+            if (wd < 0) {
+                watches_.erase(watch_id);
+                return std::unexpected(errors::ErrorCode::FS_PERMISSION_DENIED);
+            }
+            watches_[watch_id].wds.insert(wd);
+            wd_map_[wd] = {watch_id, path};
         }
     }
 #endif
 
 #ifdef MACOS
-    // Create FSEventStream for this watch
+    // Create FSEventStream for this watch (inherently recursive)
     CFStringRef cf_path = CFStringCreateWithCString(kCFAllocatorDefault, path.c_str(), kCFStringEncodingUTF8);
     CFArrayRef paths_to_watch = CFArrayCreate(kCFAllocatorDefault, (const void**)&cf_path, 1, nullptr);
 
@@ -106,11 +119,10 @@ auto LocalFileWatchManager::watch(const std::string& watch_id,
     if (stream) {
         FSEventStreamScheduleWithRunLoop(stream, run_loop_, kCFRunLoopDefaultMode);
         FSEventStreamStart(stream);
-        entry.stream = stream;
+        watches_[watch_id].stream = stream;
     }
 #endif
 
-    watches_.emplace(watch_id, std::move(entry));
     return {};
 }
 
@@ -123,8 +135,11 @@ auto LocalFileWatchManager::unwatch(const std::string& watch_id)
     }
 
 #ifdef LINUX
-    if (it->second.wd >= 0 && inotify_fd_ >= 0) {
-        ::inotify_rm_watch(inotify_fd_, it->second.wd);
+    for (int wd : it->second.wds) {
+        if (wd >= 0 && inotify_fd_ >= 0) {
+            ::inotify_rm_watch(inotify_fd_, wd);
+            wd_map_.erase(wd);
+        }
     }
 #endif
 #ifdef MACOS
@@ -196,8 +211,10 @@ auto LocalFileWatchManager::shutdown() -> void {
         std::lock_guard lock(watches_mutex_);
         for (auto& [id, entry] : watches_) {
 #ifdef LINUX
-            if (entry.wd >= 0 && inotify_fd_ >= 0) {
-                ::inotify_rm_watch(inotify_fd_, entry.wd);
+            for (int wd : entry.wds) {
+                if (wd >= 0 && inotify_fd_ >= 0) {
+                    ::inotify_rm_watch(inotify_fd_, wd);
+                }
             }
 #endif
 #ifdef MACOS
@@ -209,6 +226,9 @@ auto LocalFileWatchManager::shutdown() -> void {
 #endif
         }
         watches_.clear();
+#ifdef LINUX
+        wd_map_.clear();
+#endif
     }
 
 #ifdef LINUX
@@ -269,6 +289,46 @@ void LocalFileWatchManager::fs_event_callback(
 #endif
 
 #ifdef LINUX
+auto LocalFileWatchManager::add_recursive_watches(const std::string& watch_id,
+                                                    const std::string& root_path) -> void {
+    // Must be called under watches_mutex_
+    namespace fs = std::filesystem;
+    uint32_t mask = IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO;
+
+    // We need a temporary way to accumulate wds; they'll be stored in the WatchEntry later.
+    // For now, add to wd_map_ directly. The caller will store in entry.wds.
+
+    auto add_single = [&](const std::string& dir) {
+        int wd = ::inotify_add_watch(inotify_fd_, dir.c_str(), mask);
+        if (wd >= 0) {
+            // wd_map_ is populated; entry.wds is populated by caller
+            wd_map_[wd] = {watch_id, dir};
+            // Find or create the watch entry and add the wd
+            auto it = watches_.find(watch_id);
+            if (it != watches_.end()) {
+                it->second.wds.insert(wd);
+            }
+        }
+    };
+
+    add_single(root_path);
+
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(
+            root_path, fs::directory_options::skip_permission_denied, ec);
+         it != fs::recursive_directory_iterator(); ) {
+        if (ec) {
+            ec.clear();
+            it.increment(ec);
+            continue;
+        }
+        if (it->is_directory()) {
+            add_single(it->path().string());
+        }
+        it.increment(ec);
+    }
+}
+
 void LocalFileWatchManager::event_thread_linux() {
     char buf[4096] __attribute__((aligned(__alignof__(struct inotify_event))));
     const struct inotify_event* event;
@@ -303,22 +363,36 @@ void LocalFileWatchManager::event_thread_linux() {
 
                 std::string filename(event->name);
 
-                // Find which watch this wd belongs to
                 std::lock_guard lock(watches_mutex_);
-                for (auto& [wid, entry] : watches_) {
-                    if (entry.wd == event->wd) {
-                        auto full_path = entry.path + "/" + filename;
 
-                        models::FileChangeKind kind = models::FileChangeKind::modified;
-                        if (event->mask & IN_CREATE) kind = models::FileChangeKind::created;
-                        else if (event->mask & IN_DELETE) kind = models::FileChangeKind::deleted;
-                        else if (event->mask & IN_MOVED_FROM) kind = models::FileChangeKind::renamed;
-                        else if (event->mask & IN_MODIFY) kind = models::FileChangeKind::modified;
+                // Look up watch info via wd_map_
+                auto map_it = wd_map_.find(event->wd);
+                if (map_it == wd_map_.end()) continue;
 
-                        notify_file_changed(wid, full_path, kind);
-                        break;
+                const auto& [wid, dir_path] = map_it->second;
+                auto full_path = dir_path + "/" + filename;
+
+                models::FileChangeKind kind = models::FileChangeKind::modified;
+                if (event->mask & IN_CREATE) kind = models::FileChangeKind::created;
+                else if (event->mask & IN_DELETE) kind = models::FileChangeKind::deleted;
+                else if (event->mask & IN_MOVED_FROM) kind = models::FileChangeKind::renamed;
+                else if (event->mask & IN_MODIFY) kind = models::FileChangeKind::modified;
+
+                // If a new directory was created in a recursive watch, add a watch for it
+                if ((event->mask & (IN_CREATE | IN_MOVED_TO)) && (event->mask & IN_ISDIR)) {
+                    auto watch_it = watches_.find(wid);
+                    if (watch_it != watches_.end() && watch_it->second.recursive) {
+                        // Add watch for the new subdirectory
+                        uint32_t sub_mask = IN_MODIFY | IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO;
+                        int new_wd = ::inotify_add_watch(inotify_fd_, full_path.c_str(), sub_mask);
+                        if (new_wd >= 0) {
+                            watch_it->second.wds.insert(new_wd);
+                            wd_map_[new_wd] = {wid, full_path};
+                        }
                     }
                 }
+
+                notify_file_changed(wid, full_path, kind);
             }
         }
     }

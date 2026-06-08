@@ -1,10 +1,17 @@
 #include "server/server.hpp"
+#include <filesystem>
 #include <iostream>
 
 int main(int argc, char* argv[]) {
     std::string workspace = ".";
     if (argc > 1) {
         workspace = argv[1];
+    }
+
+    namespace fs = std::filesystem;
+    workspace = fs::absolute(workspace).string();
+    if (fs::exists(workspace)) {
+        workspace = fs::canonical(workspace).string();
     }
 
     uint16_t port = 8080;

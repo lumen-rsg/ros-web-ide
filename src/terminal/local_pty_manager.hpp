@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 
 #include "terminal/i_pty_manager.hpp"
@@ -11,7 +12,7 @@ namespace rosweb::terminal {
 
 class LocalPtyManager : public IPtyManager {
 public:
-    LocalPtyManager() = default;
+    explicit LocalPtyManager(std::string workspace_root);
     ~LocalPtyManager() override;
 
     LocalPtyManager(const LocalPtyManager&) = delete;
@@ -43,6 +44,7 @@ private:
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::unique_ptr<PtySession>> sessions_;
+    std::string workspace_root_;
 };
 
 }  // namespace rosweb::terminal

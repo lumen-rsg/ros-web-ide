@@ -51,7 +51,7 @@ private:
         FSEventStreamRef stream;
 #endif
 #ifdef LINUX
-        int wd = -1;
+        std::unordered_set<int> wds;  // all watch descriptors (root + subdirs)
 #endif
     };
 
@@ -72,6 +72,7 @@ private:
 
 #ifdef LINUX
     void event_thread_linux();
+    auto add_recursive_watches(const std::string& watch_id, const std::string& root_path) -> void;
 #endif
 
     std::atomic<bool> running_{false};
@@ -86,6 +87,8 @@ private:
 #ifdef LINUX
     int inotify_fd_ = -1;
     int shutdown_pipe_[2] = {-1, -1};
+    // Reverse map: wd -> (watch_id, dir_path)
+    std::unordered_map<int, std::pair<std::string, std::string>> wd_map_;
 #endif
 
 #ifdef MACOS

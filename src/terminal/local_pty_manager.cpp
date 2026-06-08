@@ -16,6 +16,9 @@
 
 namespace rosweb::terminal {
 
+LocalPtyManager::LocalPtyManager(std::string workspace_root)
+    : workspace_root_(std::move(workspace_root)) {}
+
 LocalPtyManager::~LocalPtyManager() {
     close_all();
 }
@@ -99,9 +102,11 @@ auto LocalPtyManager::create(
             ::close(slave_fd);
         }
 
-        // Change directory if specified
-        if (params.cwd && !params.cwd->empty()) {
-            chdir(params.cwd->c_str());
+        // Change directory — use provided cwd or default to workspace root
+        std::string effective_cwd = (params.cwd && !params.cwd->empty())
+            ? *params.cwd : workspace_root_;
+        if (!effective_cwd.empty()) {
+            chdir(effective_cwd.c_str());
         }
 
         // Set environment variables

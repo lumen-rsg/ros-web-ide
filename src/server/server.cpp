@@ -14,7 +14,7 @@ Server::Server(const std::string& workspace_root)
     : validator_(std::make_shared<fs::PathValidator>(workspace_root)),
       filesystem_(std::make_shared<fs::LocalFileSystem>(validator_)),
       system_info_(std::make_shared<system::LocalSystemInfo>()),
-      pty_manager_(std::make_shared<terminal::LocalPtyManager>()),
+      pty_manager_(std::make_shared<terminal::LocalPtyManager>(workspace_root)),
       build_manager_(std::make_shared<build::LocalBuildManager>(workspace_root)),
       ros_manager_(std::make_shared<ros::LocalRosManager>()),
       ros_stream_manager_(std::make_shared<ros::LocalRosStreamManager>()),
