@@ -261,14 +261,36 @@ auto LocalBuildManager::remove_listener(std::shared_ptr<IBuildListener> listener
 }
 
 auto LocalBuildManager::shutdown() -> void {
-    // Stop all launches
+    // Send SIGTERM to all launches first so ros2 launch can gracefully
+    // stop its child nodes.  SIGKILL alone leaves node processes orphaned.
     {
         std::lock_guard lock(launches_mutex_);
         for (auto& [id, proc] : launches_) {
             if (proc->running) {
                 proc->running = false;
-                killpg(proc->pid, SIGKILL);
+                killpg(proc->pid, SIGTERM);
             }
+        }
+    }
+
+    {
+        std::lock_guard lock(builds_mutex_);
+        for (auto& [id, proc] : builds_) {
+            if (proc->running) {
+                proc->running = false;
+                killpg(proc->pid, SIGTERM);
+            }
+        }
+    }
+
+    // Give processes a grace period to shut down gracefully
+    usleep(500000);  // 500ms
+
+    // Now force-kill anything still running
+    {
+        std::lock_guard lock(launches_mutex_);
+        for (auto& [id, proc] : launches_) {
+            killpg(proc->pid, SIGKILL);
             if (proc->shutdown_pipe[1] >= 0) {
                 char c = 0;
                 ssize_t ignored [[maybe_unused]] = ::write(proc->shutdown_pipe[1], &c, 1);
@@ -276,14 +298,10 @@ auto LocalBuildManager::shutdown() -> void {
         }
     }
 
-    // Stop all builds
     {
         std::lock_guard lock(builds_mutex_);
         for (auto& [id, proc] : builds_) {
-            if (proc->running) {
-                proc->running = false;
-                killpg(proc->pid, SIGKILL);
-            }
+            killpg(proc->pid, SIGKILL);
             if (proc->shutdown_pipe[1] >= 0) {
                 char c = 0;
                 ssize_t ignored [[maybe_unused]] = ::write(proc->shutdown_pipe[1], &c, 1);
