@@ -2,12 +2,14 @@
 
 #include <crow.h>
 #include <crow/middlewares/cors.h>
+#include <functional>
 #include <memory>
 #include <string>
-#include <functional>
+#include <vector>
 
 #include "fs/i_filesystem.hpp"
 #include "fs/path_validator.hpp"
+#include "workspace/i_workspace_aware.hpp"
 #include "workspace/package_discovery.hpp"
 
 namespace rosweb::api {
@@ -15,13 +17,16 @@ namespace rosweb::api {
 class WorkspaceController {
 public:
     WorkspaceController(std::shared_ptr<fs::PathValidator> validator,
-                        std::shared_ptr<fs::IFileSystem> filesystem);
+                        std::shared_ptr<fs::IFileSystem> filesystem,
+                        std::vector<std::shared_ptr<workspace::IWorkspaceAware>> workspace_aware);
 
     void register_routes(crow::App<crow::CORSHandler>& app);
+    void add_workspace_aware(std::shared_ptr<workspace::IWorkspaceAware> component);
 
 private:
     std::shared_ptr<fs::PathValidator> validator_;
     std::shared_ptr<fs::IFileSystem> fs_;
+    std::vector<std::shared_ptr<workspace::IWorkspaceAware>> workspace_aware_;
     workspace::PackageDiscovery package_discovery_;
 
     auto handle_get_workspace(const crow::request& req) -> std::string;

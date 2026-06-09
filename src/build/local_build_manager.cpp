@@ -1,5 +1,7 @@
 #include "build/local_build_manager.hpp"
 
+#include "subprocess/ros_setup.hpp"
+
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/select.h>
@@ -20,6 +22,16 @@ namespace rosweb::build {
 
 LocalBuildManager::LocalBuildManager(std::string workspace_root)
     : workspace_root_(std::move(workspace_root)) {}
+
+void LocalBuildManager::set_workspace_root(const std::string& root) {
+    std::lock_guard lock(workspace_mutex_);
+    workspace_root_ = root;
+}
+
+auto LocalBuildManager::current_workspace_root() const -> std::string {
+    std::lock_guard lock(workspace_mutex_);
+    return workspace_root_;
+}
 
 LocalBuildManager::~LocalBuildManager() {
     shutdown();
@@ -198,8 +210,9 @@ auto LocalBuildManager::discover_launch_files() const
     namespace fs = std::filesystem;
     std::error_code ec;
 
+    auto root = current_workspace_root();
     for (auto it = fs::recursive_directory_iterator(
-            workspace_root_, fs::directory_options::skip_permission_denied, ec);
+            root, fs::directory_options::skip_permission_denied, ec);
          it != fs::recursive_directory_iterator(); ) {
         if (ec) {
             ec.clear();
@@ -325,6 +338,9 @@ auto LocalBuildManager::shutdown() -> void {
 
 void LocalBuildManager::spawn_build_process(std::unique_ptr<BuildProcess> proc,
                                               const std::vector<std::string>& cmd) {
+    auto workspace = current_workspace_root();
+    auto wrapped_cmd = subprocess::wrap_with_ros_setup(workspace, cmd);
+
     if (pipe(proc->stdout_pipe) < 0) return;
     if (pipe(proc->stderr_pipe) < 0) {
         ::close(proc->stdout_pipe[0]); ::close(proc->stdout_pipe[1]);
@@ -356,11 +372,11 @@ void LocalBuildManager::spawn_build_process(std::unique_ptr<BuildProcess> proc,
         if (proc->stdout_pipe[1] > STDERR_FILENO) ::close(proc->stdout_pipe[1]);
         if (proc->stderr_pipe[1] > STDERR_FILENO) ::close(proc->stderr_pipe[1]);
 
-        chdir(workspace_root_.c_str());
+        chdir(workspace.c_str());
 
         // Build argv for execvp
         std::vector<char*> argv;
-        for (auto& s : cmd) argv.push_back(const_cast<char*>(s.c_str()));
+        for (auto& s : wrapped_cmd) argv.push_back(const_cast<char*>(s.c_str()));
         argv.push_back(nullptr);
 
         setpgid(0, 0);
@@ -390,6 +406,9 @@ void LocalBuildManager::spawn_build_process(std::unique_ptr<BuildProcess> proc,
 
 void LocalBuildManager::spawn_launch_process(std::unique_ptr<LaunchProcess> proc,
                                                const std::vector<std::string>& cmd) {
+    auto workspace = current_workspace_root();
+    auto wrapped_cmd = subprocess::wrap_with_ros_setup(workspace, cmd);
+
     if (pipe(proc->stdout_pipe) < 0) return;
     if (pipe(proc->stderr_pipe) < 0) {
         ::close(proc->stdout_pipe[0]); ::close(proc->stdout_pipe[1]);
@@ -421,10 +440,10 @@ void LocalBuildManager::spawn_launch_process(std::unique_ptr<LaunchProcess> proc
         if (proc->stdout_pipe[1] > STDERR_FILENO) ::close(proc->stdout_pipe[1]);
         if (proc->stderr_pipe[1] > STDERR_FILENO) ::close(proc->stderr_pipe[1]);
 
-        chdir(workspace_root_.c_str());
+        chdir(workspace.c_str());
 
         std::vector<char*> argv;
-        for (auto& s : cmd) argv.push_back(const_cast<char*>(s.c_str()));
+        for (auto& s : wrapped_cmd) argv.push_back(const_cast<char*>(s.c_str()));
         argv.push_back(nullptr);
 
         setpgid(0, 0);

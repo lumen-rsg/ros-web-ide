@@ -5,6 +5,8 @@
 #include "terminal/local_pty_manager.hpp"
 #include "build/local_build_manager.hpp"
 #include "ros/local_ros_manager.hpp"
+#include "ros/local_ros_stream_manager.hpp"
+#include "tf/local_tf_manager.hpp"
 #include "filewatch/local_filewatch_manager.hpp"
 #include "errors/error_response.hpp"
 
@@ -16,11 +18,23 @@ Server::Server(const std::string& workspace_root)
       system_info_(std::make_shared<system::LocalSystemInfo>()),
       pty_manager_(std::make_shared<terminal::LocalPtyManager>(workspace_root)),
       build_manager_(std::make_shared<build::LocalBuildManager>(workspace_root)),
-      ros_manager_(std::make_shared<ros::LocalRosManager>()),
-      ros_stream_manager_(std::make_shared<ros::LocalRosStreamManager>()),
+      ros_manager_(std::make_shared<ros::LocalRosManager>(workspace_root)),
+      ros_stream_manager_(std::make_shared<ros::LocalRosStreamManager>(workspace_root)),
       filewatch_manager_(std::make_shared<filewatch::LocalFileWatchManager>()),
       fs_controller_(std::make_unique<api::FsController>(filesystem_, validator_)),
-      workspace_controller_(std::make_unique<api::WorkspaceController>(validator_, filesystem_)),
+      workspace_controller_(std::make_unique<api::WorkspaceController>(
+          validator_,
+          filesystem_,
+          std::vector<std::shared_ptr<workspace::IWorkspaceAware>>{
+              std::static_pointer_cast<workspace::IWorkspaceAware>(
+                  std::static_pointer_cast<build::LocalBuildManager>(build_manager_)),
+              std::static_pointer_cast<workspace::IWorkspaceAware>(
+                  std::static_pointer_cast<terminal::LocalPtyManager>(pty_manager_)),
+              std::static_pointer_cast<workspace::IWorkspaceAware>(
+                  std::static_pointer_cast<ros::LocalRosManager>(ros_manager_)),
+              std::static_pointer_cast<workspace::IWorkspaceAware>(
+                  std::static_pointer_cast<ros::LocalRosStreamManager>(ros_stream_manager_)),
+          })),
       system_controller_(std::make_unique<api::SystemController>(system_info_)),
       build_controller_(std::make_unique<api::BuildController>(build_manager_)),
       ros_controller_(std::make_unique<api::RosController>(ros_manager_)) {
@@ -40,7 +54,10 @@ Server::Server(const std::string& workspace_root)
     ros_stream_manager_->add_listener(ros_channel_);
     ws_router->register_channel(ros_channel_);
 
-    tf_manager_ = std::make_shared<tf::LocalTfManager>();
+    tf_manager_ = std::make_shared<tf::LocalTfManager>(workspace_root);
+    workspace_controller_->add_workspace_aware(
+        std::static_pointer_cast<workspace::IWorkspaceAware>(
+            std::static_pointer_cast<tf::LocalTfManager>(tf_manager_)));
     tf_channel_ = std::make_shared<ws::TfChannel>(tf_manager_);
     tf_manager_->add_listener(tf_channel_);
     ws_router->register_channel(tf_channel_);

@@ -14,16 +14,19 @@
 #include "errors/error_codes.hpp"
 #include "ros/i_ros_stream_manager.hpp"
 #include "subprocess/subprocess_executor.hpp"
+#include "workspace/i_workspace_aware.hpp"
 
 namespace rosweb::ros {
 
-class LocalRosStreamManager : public IRosStreamManager {
+class LocalRosStreamManager : public IRosStreamManager, public workspace::IWorkspaceAware {
 public:
-    LocalRosStreamManager() = default;
+    explicit LocalRosStreamManager(std::string workspace_root = ".");
     ~LocalRosStreamManager() override;
 
     LocalRosStreamManager(const LocalRosStreamManager&) = delete;
     auto operator=(const LocalRosStreamManager&) -> LocalRosStreamManager& = delete;
+
+    void set_workspace_root(const std::string& root) override;
 
     auto subscribe_topic(
         const std::string& subscription_id,
@@ -146,8 +149,12 @@ private:
 
     // Topic stream management
     void stop_topic_stream(const std::string& topic);
+    auto wrap_ros_command(const std::vector<std::string>& cmd) const
+        -> std::vector<std::string>;
 
     subprocess::SubprocessExecutor executor_;
+    mutable std::mutex workspace_mutex_;
+    std::string workspace_root_;
 
     // Topic subscriptions and streams
     mutable std::mutex topics_mutex_;

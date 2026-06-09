@@ -17,9 +17,18 @@
 
 namespace rosweb::api {
 
-WorkspaceController::WorkspaceController(std::shared_ptr<fs::PathValidator> validator,
-                                         std::shared_ptr<fs::IFileSystem> filesystem)
-    : validator_(std::move(validator)), fs_(std::move(filesystem)) {}
+WorkspaceController::WorkspaceController(
+    std::shared_ptr<fs::PathValidator> validator,
+    std::shared_ptr<fs::IFileSystem> filesystem,
+    std::vector<std::shared_ptr<workspace::IWorkspaceAware>> workspace_aware)
+    : validator_(std::move(validator)),
+      fs_(std::move(filesystem)),
+      workspace_aware_(std::move(workspace_aware)) {}
+
+void WorkspaceController::add_workspace_aware(
+    std::shared_ptr<workspace::IWorkspaceAware> component) {
+    workspace_aware_.push_back(std::move(component));
+}
 
 void WorkspaceController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/workspace")
@@ -66,6 +75,9 @@ auto WorkspaceController::handle_open_workspace(const crow::request& req) -> std
 
     // Switch workspace root
     validator_->set_workspace_root(path);
+    for (const auto& component : workspace_aware_) {
+        component->set_workspace_root(validator_->workspace_root());
+    }
 
     auto info = build_workspace_info();
     nlohmann::json j = info;

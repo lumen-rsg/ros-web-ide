@@ -3,7 +3,7 @@
 # ============================================================
 
 # --- Toolchain ---
-CXX       := g++
+CXX       := g++-13
 CXXFLAGS  := -std=c++23 -Wall -Wextra -Wpedantic -fPIC
 
 # --- Build type ---
