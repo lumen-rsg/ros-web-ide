@@ -14,16 +14,19 @@
 #include "subprocess/subprocess_executor.hpp"
 #include "tf/i_tf_listener.hpp"
 #include "tf/i_tf_manager.hpp"
+#include "workspace/i_workspace_aware.hpp"
 
 namespace rosweb::tf {
 
-class LocalTfManager : public ITfManager {
+class LocalTfManager : public ITfManager, public workspace::IWorkspaceAware {
 public:
-    LocalTfManager() = default;
+    explicit LocalTfManager(std::string workspace_root = ".");
     ~LocalTfManager() override;
 
     LocalTfManager(const LocalTfManager&) = delete;
     auto operator=(const LocalTfManager&) -> LocalTfManager& = delete;
+
+    void set_workspace_root(const std::string& root) override;
 
     auto subscribe_tf(
         const std::string& subscription_id,
@@ -65,8 +68,12 @@ private:
     static auto count_indent(const std::string& line) -> int;
     static auto trim_str(const std::string& s) -> std::string;
     static auto split_lines(const std::string& s) -> std::vector<std::string>;
+    auto wrap_ros_command(const std::vector<std::string>& cmd) const
+        -> std::vector<std::string>;
 
     subprocess::SubprocessExecutor executor_;
+    mutable std::mutex workspace_mutex_;
+    std::string workspace_root_;
 
     std::unique_ptr<subprocess::StreamingHandle> tf_stream_handle_;
     std::string tf_buffer_;

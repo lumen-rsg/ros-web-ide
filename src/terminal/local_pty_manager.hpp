@@ -7,16 +7,19 @@
 
 #include "terminal/i_pty_manager.hpp"
 #include "terminal/pty_session.hpp"
+#include "workspace/i_workspace_aware.hpp"
 
 namespace rosweb::terminal {
 
-class LocalPtyManager : public IPtyManager {
+class LocalPtyManager : public IPtyManager, public workspace::IWorkspaceAware {
 public:
     explicit LocalPtyManager(std::string workspace_root);
     ~LocalPtyManager() override;
 
     LocalPtyManager(const LocalPtyManager&) = delete;
     auto operator=(const LocalPtyManager&) -> LocalPtyManager& = delete;
+
+    void set_workspace_root(const std::string& root) override;
 
     auto create(
         const PtyCreateParams& params,
@@ -44,6 +47,7 @@ private:
 
     mutable std::mutex mutex_;
     std::unordered_map<std::string, std::unique_ptr<PtySession>> sessions_;
+    mutable std::mutex workspace_mutex_;
     std::string workspace_root_;
 };
 

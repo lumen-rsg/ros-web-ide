@@ -19,6 +19,11 @@ namespace rosweb::terminal {
 LocalPtyManager::LocalPtyManager(std::string workspace_root)
     : workspace_root_(std::move(workspace_root)) {}
 
+void LocalPtyManager::set_workspace_root(const std::string& root) {
+    std::lock_guard lock(workspace_mutex_);
+    workspace_root_ = root;
+}
+
 LocalPtyManager::~LocalPtyManager() {
     close_all();
 }
@@ -75,6 +80,12 @@ auto LocalPtyManager::create(
         return std::unexpected(errors::ErrorCode::INTERNAL_ERROR);
     }
 
+    std::string default_cwd;
+    {
+        std::lock_guard ws_lock(workspace_mutex_);
+        default_cwd = workspace_root_;
+    }
+
     pid_t pid = fork();
     if (pid < 0) {
         ::close(pipe_fds[0]);
@@ -104,7 +115,7 @@ auto LocalPtyManager::create(
 
         // Change directory — use provided cwd or default to workspace root
         std::string effective_cwd = (params.cwd && !params.cwd->empty())
-            ? *params.cwd : workspace_root_;
+            ? *params.cwd : default_cwd;
         if (!effective_cwd.empty()) {
             chdir(effective_cwd.c_str());
         }

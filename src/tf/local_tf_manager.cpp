@@ -1,10 +1,30 @@
 #include "tf/local_tf_manager.hpp"
 
+#include "subprocess/ros_setup.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <sstream>
 
 namespace rosweb::tf {
+
+LocalTfManager::LocalTfManager(std::string workspace_root)
+    : workspace_root_(std::move(workspace_root)) {}
+
+void LocalTfManager::set_workspace_root(const std::string& root) {
+    std::lock_guard lock(workspace_mutex_);
+    workspace_root_ = root;
+}
+
+auto LocalTfManager::wrap_ros_command(const std::vector<std::string>& cmd) const
+    -> std::vector<std::string> {
+    std::string root;
+    {
+        std::lock_guard lock(workspace_mutex_);
+        root = workspace_root_;
+    }
+    return subprocess::wrap_with_ros_setup(root, cmd);
+}
 
 LocalTfManager::~LocalTfManager() {
     shutdown();
@@ -59,7 +79,7 @@ auto LocalTfManager::get_tf_tree()
     -> std::expected<models::TfTreePayload, errors::ErrorCode> {
     // Run ros2 topic echo /tf_static --once to get static transforms
     auto result = executor_.execute(
-        {"ros2", "topic", "echo", "/tf_static", "--once"}, 10000);
+        wrap_ros_command({"ros2", "topic", "echo", "/tf_static", "--once"}), 10000);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
@@ -138,7 +158,7 @@ void LocalTfManager::start_tf_stream() {
     };
 
     auto handle = executor_.start_streaming(
-        {"ros2", "topic", "echo", "/tf"}, callbacks);
+        wrap_ros_command({"ros2", "topic", "echo", "/tf"}), callbacks);
     if (handle.has_value()) {
         tf_stream_handle_ = std::move(handle.value());
     }

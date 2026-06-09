@@ -10,16 +10,19 @@
 
 #include "build/i_build_manager.hpp"
 #include "build/i_build_listener.hpp"
+#include "workspace/i_workspace_aware.hpp"
 
 namespace rosweb::build {
 
-class LocalBuildManager : public IBuildManager {
+class LocalBuildManager : public IBuildManager, public workspace::IWorkspaceAware {
 public:
     explicit LocalBuildManager(std::string workspace_root);
     ~LocalBuildManager() override;
 
     LocalBuildManager(const LocalBuildManager&) = delete;
     auto operator=(const LocalBuildManager&) -> LocalBuildManager& = delete;
+
+    void set_workspace_root(const std::string& root) override;
 
     auto start_build(const models::BuildRequest& request)
         -> std::expected<models::BuildResponse, errors::ErrorCode> override;
@@ -101,7 +104,9 @@ private:
                                int exit_code);
 
     auto find_package_for_path(const std::string& file_path) const -> std::string;
+    auto current_workspace_root() const -> std::string;
 
+    mutable std::mutex workspace_mutex_;
     std::string workspace_root_;
 
     mutable std::mutex builds_mutex_;

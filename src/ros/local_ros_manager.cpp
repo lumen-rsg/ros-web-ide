@@ -1,15 +1,31 @@
 #include "ros/local_ros_manager.hpp"
 
+#include "subprocess/ros_setup.hpp"
+
 #include <algorithm>
 #include <sstream>
 
 namespace rosweb::ros {
 
+LocalRosManager::LocalRosManager(std::string workspace_root)
+    : workspace_root_(std::move(workspace_root)) {}
+
+void LocalRosManager::set_workspace_root(const std::string& root) {
+    std::lock_guard lock(workspace_mutex_);
+    workspace_root_ = root;
+}
+
+auto LocalRosManager::current_workspace_root() const -> std::string {
+    std::lock_guard lock(workspace_mutex_);
+    return workspace_root_;
+}
+
 // --- Helpers ---
 
 auto LocalRosManager::run_command(const std::vector<std::string>& args)
     -> std::expected<std::string, errors::ErrorCode> {
-    auto result = executor_.execute(args, 10000);
+    auto wrapped = subprocess::wrap_with_ros_setup(current_workspace_root(), args);
+    auto result = executor_.execute(wrapped, 10000);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
@@ -346,8 +362,10 @@ auto LocalRosManager::set_param(const models::RosParamSetRequest& req)
         value_str = req.value.dump();
     }
 
-    auto result = executor_.execute(
-        {"ros2", "param", "set", req.node, req.name, value_str}, 10000);
+    auto wrapped = subprocess::wrap_with_ros_setup(
+        current_workspace_root(),
+        {"ros2", "param", "set", req.node, req.name, value_str});
+    auto result = executor_.execute(wrapped, 10000);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
