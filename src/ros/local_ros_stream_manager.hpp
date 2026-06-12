@@ -161,9 +161,16 @@ private:
     std::unordered_map<std::string, TopicStream> topic_streams_;
     std::unordered_map<std::string, TopicSubscription> subscriptions_;
 
-    // Service calls
+    // Service calls (tracked threads for clean shutdown)
+    struct TrackedThread {
+        std::thread thread;
+        std::atomic<bool> completed{false};
+    };
     mutable std::mutex services_mutex_;
     std::unordered_set<std::string> active_service_calls_;
+    std::mutex service_threads_mutex_;
+    std::vector<std::unique_ptr<TrackedThread>> service_threads_;
+    void cleanup_service_threads();
 
     // Action calls
     mutable std::mutex actions_mutex_;

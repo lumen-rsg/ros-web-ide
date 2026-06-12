@@ -63,7 +63,7 @@ struct OutputCollector {
 
 TEST_SUITE("LocalPtyManager") {
     TEST_CASE("create and exit") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         OutputCollector collector;
 
         PtyCreateParams params{
@@ -90,7 +90,7 @@ TEST_SUITE("LocalPtyManager") {
     }
 
     TEST_CASE("write and read output") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         OutputCollector collector;
 
         PtyCreateParams params{
@@ -123,21 +123,21 @@ TEST_SUITE("LocalPtyManager") {
     }
 
     TEST_CASE("terminal not found on write") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         auto result = mgr.write("nonexistent", "data");
         CHECK_FALSE(result.has_value());
         CHECK(result.error() == rosweb::errors::ErrorCode::TERMINAL_NOT_FOUND);
     }
 
     TEST_CASE("terminal not found on kill") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         auto result = mgr.kill("nonexistent");
         CHECK_FALSE(result.has_value());
         CHECK(result.error() == rosweb::errors::ErrorCode::TERMINAL_NOT_FOUND);
     }
 
     TEST_CASE("resize terminal") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         OutputCollector collector;
 
         PtyCreateParams params{
@@ -161,14 +161,14 @@ TEST_SUITE("LocalPtyManager") {
     }
 
     TEST_CASE("resize non-existent terminal") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         auto result = mgr.resize("nonexistent", 120, 40);
         CHECK_FALSE(result.has_value());
         CHECK(result.error() == rosweb::errors::ErrorCode::TERMINAL_NOT_FOUND);
     }
 
     TEST_CASE("max terminal limit") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
 
         auto on_out = [&](const std::string&, std::string) {};
         auto on_ex = [&](const std::string&, int) {};
@@ -198,7 +198,7 @@ TEST_SUITE("LocalPtyManager") {
     }
 
     TEST_CASE("close_all cleans up") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         OutputCollector collector;
 
         PtyCreateParams p1{.terminal_id = "ca1", .shell = "/bin/sh", .cols = 80, .rows = 24};
@@ -220,7 +220,7 @@ TEST_SUITE("LocalPtyManager") {
     }
 
     TEST_CASE("exit code propagated") {
-        LocalPtyManager mgr;
+        LocalPtyManager mgr(".");
         OutputCollector collector;
 
         PtyCreateParams params{

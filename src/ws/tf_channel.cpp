@@ -15,6 +15,10 @@ TfChannel::TfChannel(std::shared_ptr<tf::ITfManager> tf_manager)
 
 TfChannel::~TfChannel() = default;
 
+void TfChannel::set_manager(std::shared_ptr<tf::ITfManager> tf_manager) {
+    tf_manager_ = std::move(tf_manager);
+}
+
 auto TfChannel::channel_name() const -> std::string_view {
     return "tf";
 }

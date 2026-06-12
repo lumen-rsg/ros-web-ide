@@ -18,6 +18,8 @@ public:
     explicit TfChannel(std::shared_ptr<tf::ITfManager> tf_manager);
     ~TfChannel() override;
 
+    void set_manager(std::shared_ptr<tf::ITfManager> tf_manager);
+
     // IWsChannel
     auto channel_name() const -> std::string_view override;
     void handle_message(const WsMessage& msg,

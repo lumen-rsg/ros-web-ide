@@ -19,6 +19,8 @@ public:
     explicit BuildChannel(std::shared_ptr<build::IBuildManager> build_manager);
     ~BuildChannel() override;
 
+    void set_manager(std::shared_ptr<build::IBuildManager> build_manager);
+
     // IWsChannel
     auto channel_name() const -> std::string_view override;
     void handle_message(const WsMessage& msg,

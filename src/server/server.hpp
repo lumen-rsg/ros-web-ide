@@ -45,6 +45,9 @@ public:
     void start(uint16_t port = 8080);
 
 private:
+    void restart_ros_subsystems();
+
+    std::string workspace_root_;
     crow::App<crow::CORSHandler> app_;
     std::shared_ptr<fs::PathValidator> validator_;
     std::shared_ptr<fs::IFileSystem> filesystem_;

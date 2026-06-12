@@ -1,7 +1,9 @@
 #include "system/local_system_info.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <thread>
@@ -253,6 +255,76 @@ auto LocalSystemInfo::get_env_var(const char* name) -> std::optional<std::string
         return std::string(val);
     }
     return std::nullopt;
+}
+
+auto LocalSystemInfo::set_domain_id(const std::optional<int>& domain_id)
+    -> std::expected<void, errors::ErrorCode> {
+    // Resolve ~/.zshrc path
+    const char* home = std::getenv("HOME");
+    if (!home || home[0] == '\0') {
+        return std::unexpected(errors::ErrorCode::INTERNAL_ERROR);
+    }
+
+    auto zshrc_path = std::filesystem::path(home) / ".zshrc";
+
+    // Read existing content
+    std::vector<std::string> lines;
+    if (std::filesystem::exists(zshrc_path)) {
+        std::ifstream file(zshrc_path);
+        std::string line;
+        while (std::getline(file, line)) {
+            lines.push_back(line);
+        }
+    }
+
+    const std::string marker = "export ROS_DOMAIN_ID=";
+    bool found = false;
+
+    if (domain_id.has_value()) {
+        std::string new_line = marker + std::to_string(domain_id.value());
+        for (auto& l : lines) {
+            if (l.starts_with(marker) || l.find("ROS_DOMAIN_ID=") != std::string::npos) {
+                // Replace existing line that sets ROS_DOMAIN_ID
+                auto eq_pos = l.find("ROS_DOMAIN_ID=");
+                auto prefix = l.substr(0, eq_pos);
+                // Check if it's an export line
+                if (prefix.find("export") != std::string::npos || l.starts_with("ROS_DOMAIN_ID=")) {
+                    l = new_line;
+                    found = true;
+                }
+            }
+        }
+        if (!found) {
+            lines.push_back(new_line);
+        }
+
+        // Update current process environment
+        std::string val_str = std::to_string(domain_id.value());
+        ::setenv("ROS_DOMAIN_ID", val_str.c_str(), 1);
+    } else {
+        // Unset: remove the line
+        lines.erase(
+            std::remove_if(lines.begin(), lines.end(),
+                [&marker](const std::string& l) {
+                    return l.starts_with(marker);
+                }),
+            lines.end());
+
+        ::unsetenv("ROS_DOMAIN_ID");
+    }
+
+    // Write back
+    std::ofstream file(zshrc_path, std::ios::trunc);
+    if (!file.is_open()) {
+        return std::unexpected(errors::ErrorCode::FS_WRITE_FAILED);
+    }
+    for (size_t i = 0; i < lines.size(); ++i) {
+        file << lines[i];
+        if (i + 1 < lines.size()) file << '\n';
+    }
+    if (!lines.empty()) file << '\n';
+
+    return {};
 }
 
 }  // namespace rosweb::system

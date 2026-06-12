@@ -15,6 +15,7 @@ class BuildController {
 public:
     explicit BuildController(std::shared_ptr<build::IBuildManager> build_manager);
 
+    void set_manager(std::shared_ptr<build::IBuildManager> build_manager);
     void register_routes(crow::App<crow::CORSHandler>& app);
 
 private:

@@ -30,6 +30,17 @@ void WorkspaceController::add_workspace_aware(
     workspace_aware_.push_back(std::move(component));
 }
 
+void WorkspaceController::replace_workspace_aware(
+    std::shared_ptr<workspace::IWorkspaceAware> old_component,
+    std::shared_ptr<workspace::IWorkspaceAware> new_component) {
+    for (auto& comp : workspace_aware_) {
+        if (comp.get() == old_component.get()) {
+            comp = std::move(new_component);
+            return;
+        }
+    }
+}
+
 void WorkspaceController::register_routes(crow::App<crow::CORSHandler>& app) {
     CROW_ROUTE(app, "/api/v1/workspace")
     ([this](const crow::request& req) {

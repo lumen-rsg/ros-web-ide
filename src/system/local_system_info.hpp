@@ -8,6 +8,8 @@ class LocalSystemInfo : public ISystemInfo {
 public:
     auto get_system_info() const -> models::SystemInfo override;
     auto get_ros_env() const -> models::RosEnvInfo override;
+    auto set_domain_id(const std::optional<int>& domain_id)
+        -> std::expected<void, errors::ErrorCode> override;
 
 private:
     static auto get_hostname() -> std::string;

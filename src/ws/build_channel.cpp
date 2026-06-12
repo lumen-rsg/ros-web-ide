@@ -16,6 +16,10 @@ BuildChannel::BuildChannel(std::shared_ptr<build::IBuildManager> build_manager)
 
 BuildChannel::~BuildChannel() = default;
 
+void BuildChannel::set_manager(std::shared_ptr<build::IBuildManager> build_manager) {
+    build_manager_ = std::move(build_manager);
+}
+
 auto BuildChannel::channel_name() const -> std::string_view {
     return "build";
 }

@@ -18,6 +18,8 @@ public:
     explicit RosChannel(std::shared_ptr<ros::IRosStreamManager> stream_manager);
     ~RosChannel() override;
 
+    void set_manager(std::shared_ptr<ros::IRosStreamManager> stream_manager);
+
     // IWsChannel
     auto channel_name() const -> std::string_view override;
     void handle_message(const WsMessage& msg,

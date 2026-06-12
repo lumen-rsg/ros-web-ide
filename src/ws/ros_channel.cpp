@@ -15,6 +15,10 @@ RosChannel::RosChannel(std::shared_ptr<ros::IRosStreamManager> stream_manager)
 
 RosChannel::~RosChannel() = default;
 
+void RosChannel::set_manager(std::shared_ptr<ros::IRosStreamManager> stream_manager) {
+    stream_manager_ = std::move(stream_manager);
+}
+
 auto RosChannel::channel_name() const -> std::string_view {
     return "ros";
 }

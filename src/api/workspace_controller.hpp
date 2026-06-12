@@ -22,6 +22,9 @@ public:
 
     void register_routes(crow::App<crow::CORSHandler>& app);
     void add_workspace_aware(std::shared_ptr<workspace::IWorkspaceAware> component);
+    void replace_workspace_aware(
+        std::shared_ptr<workspace::IWorkspaceAware> old_component,
+        std::shared_ptr<workspace::IWorkspaceAware> new_component);
 
 private:
     std::shared_ptr<fs::PathValidator> validator_;

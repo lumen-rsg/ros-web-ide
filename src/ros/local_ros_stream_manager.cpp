@@ -234,8 +234,13 @@ auto LocalRosStreamManager::call_service(
     auto* self = this;
     std::string call_id_copy = call_id;
 
-    // Run in a background thread so we don't block the WS handler
-    std::thread([self, call_id_copy, service, type, request, timeout_ms]() {
+    // Clean up completed service threads
+    cleanup_service_threads();
+
+    // Run in a tracked background thread so we don't block the WS handler
+    auto tracked = std::make_unique<TrackedThread>();
+    auto* raw = tracked.get();
+    raw->thread = std::thread([self, call_id_copy, service, type, request, timeout_ms, raw]() {
         auto result = self->executor_.execute(
             self->wrap_ros_command({"ros2", "service", "call", service, type, request.dump()}),
             timeout_ms);
@@ -253,7 +258,12 @@ auto LocalRosStreamManager::call_service(
 
         std::lock_guard lock(self->services_mutex_);
         self->active_service_calls_.erase(call_id_copy);
-    }).detach();
+        raw->completed.store(true);
+    });
+    {
+        std::lock_guard lock(service_threads_mutex_);
+        service_threads_.push_back(std::move(tracked));
+    }
 
     return {};
 }
@@ -515,8 +525,29 @@ auto LocalRosStreamManager::remove_listener(
 
 // --- Shutdown ---
 
+void LocalRosStreamManager::cleanup_service_threads() {
+    std::lock_guard lock(service_threads_mutex_);
+    for (auto it = service_threads_.begin(); it != service_threads_.end(); ) {
+        if ((*it)->completed.load()) {
+            if ((*it)->thread.joinable()) (*it)->thread.join();
+            it = service_threads_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 auto LocalRosStreamManager::shutdown() -> void {
     if (shutting_down_.exchange(true)) return;
+
+    // Join all service call threads
+    {
+        std::lock_guard lock(service_threads_mutex_);
+        for (auto& t : service_threads_) {
+            if (t->thread.joinable()) t->thread.join();
+        }
+        service_threads_.clear();
+    }
 
     stop_node_monitor();
 
