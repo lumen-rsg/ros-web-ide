@@ -109,9 +109,12 @@ void Server::restart_ros_subsystems() {
     old_tf->remove_listener(tf_channel_);
 
     // 3. Create new managers with updated environment
-    build_manager_ = std::make_shared<build::LocalBuildManager>(workspace_root_);
-    ros_stream_manager_ = std::make_shared<ros::LocalRosStreamManager>(workspace_root_);
-    tf_manager_ = std::make_shared<tf::LocalTfManager>(workspace_root_);
+    // Use validator's workspace_root() which stays in sync with workspace switches,
+    // unlike Server::workspace_root_ which is only set at construction time.
+    auto current_ws = validator_->workspace_root();
+    build_manager_ = std::make_shared<build::LocalBuildManager>(current_ws);
+    ros_stream_manager_ = std::make_shared<ros::LocalRosStreamManager>(current_ws);
+    tf_manager_ = std::make_shared<tf::LocalTfManager>(current_ws);
 
     // 4. Update build controller's manager reference
     build_controller_->set_manager(build_manager_);

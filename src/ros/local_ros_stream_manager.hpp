@@ -151,6 +151,7 @@ private:
     void stop_topic_stream(const std::string& topic);
     auto wrap_ros_command(const std::vector<std::string>& cmd) const
         -> std::vector<std::string>;
+    auto current_workspace_root() const -> std::string;
 
     subprocess::SubprocessExecutor executor_;
     mutable std::mutex workspace_mutex_;

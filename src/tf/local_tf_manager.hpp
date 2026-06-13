@@ -70,6 +70,7 @@ private:
     static auto split_lines(const std::string& s) -> std::vector<std::string>;
     auto wrap_ros_command(const std::vector<std::string>& cmd) const
         -> std::vector<std::string>;
+    auto current_workspace_root() const -> std::string;
 
     subprocess::SubprocessExecutor executor_;
     mutable std::mutex workspace_mutex_;

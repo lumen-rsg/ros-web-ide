@@ -18,12 +18,12 @@ void LocalRosStreamManager::set_workspace_root(const std::string& root) {
 
 auto LocalRosStreamManager::wrap_ros_command(const std::vector<std::string>& cmd) const
     -> std::vector<std::string> {
-    std::string root;
-    {
-        std::lock_guard lock(workspace_mutex_);
-        root = workspace_root_;
-    }
-    return subprocess::wrap_with_ros_setup(root, cmd);
+    return subprocess::wrap_with_ros_setup(current_workspace_root(), cmd);
+}
+
+auto LocalRosStreamManager::current_workspace_root() const -> std::string {
+    std::lock_guard lock(workspace_mutex_);
+    return workspace_root_;
 }
 
 LocalRosStreamManager::~LocalRosStreamManager() {
@@ -80,8 +80,9 @@ auto LocalRosStreamManager::subscribe_topic(
         self->topic_streams_.erase(it);
     };
 
+    auto ws = current_workspace_root();
     auto handle = executor_.start_streaming(
-        wrap_ros_command({"ros2", "topic", "echo", topic}), callbacks);
+        wrap_ros_command({"ros2", "topic", "echo", topic}), callbacks, ws);
     if (!handle.has_value()) {
         return std::unexpected(handle.error());
     }
@@ -201,9 +202,10 @@ auto LocalRosStreamManager::publish_topic(
     const std::string& type,
     const nlohmann::json& message)
     -> std::expected<void, errors::ErrorCode> {
+    auto ws = current_workspace_root();
     auto result = executor_.execute(
         wrap_ros_command({"ros2", "topic", "pub", topic, type, message.dump(), "--once"}),
-        10000);
+        10000, ws);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
@@ -241,9 +243,10 @@ auto LocalRosStreamManager::call_service(
     auto tracked = std::make_unique<TrackedThread>();
     auto* raw = tracked.get();
     raw->thread = std::thread([self, call_id_copy, service, type, request, timeout_ms, raw]() {
+        auto ws = self->current_workspace_root();
         auto result = self->executor_.execute(
             self->wrap_ros_command({"ros2", "service", "call", service, type, request.dump()}),
-            timeout_ms);
+            timeout_ms, ws);
 
         if (!result.has_value()) {
             self->notify_service_result(call_id_copy, false,
@@ -305,9 +308,10 @@ auto LocalRosStreamManager::call_action(
         }
     };
 
+    auto ws = current_workspace_root();
     auto handle = executor_.start_streaming(
         wrap_ros_command({"ros2", "action", "send_goal", action, type, goal.dump(), "--feedback"}),
-        callbacks);
+        callbacks, ws);
     if (!handle.has_value()) {
         return std::unexpected(handle.error());
     }
@@ -415,7 +419,8 @@ auto LocalRosStreamManager::start_bag(
             std::nullopt, std::nullopt, std::nullopt);
     };
 
-    auto handle = executor_.start_streaming(wrap_ros_command(cmd), callbacks);
+    auto ws = current_workspace_root();
+    auto handle = executor_.start_streaming(wrap_ros_command(cmd), callbacks, ws);
     if (!handle.has_value()) {
         return std::unexpected(errors::ErrorCode::BAG_WRITE_ERROR);
     }
@@ -472,7 +477,8 @@ void LocalRosStreamManager::stop_node_monitor() {
 
 void LocalRosStreamManager::node_poll_loop() {
     while (node_monitor_running_ && !shutting_down_) {
-        auto result = executor_.execute(wrap_ros_command({"ros2", "node", "list"}), 5000);
+        auto ws = current_workspace_root();
+        auto result = executor_.execute(wrap_ros_command({"ros2", "node", "list"}), 5000, ws);
 
         if (result.has_value() && result->exit_code == 0) {
             auto lines = split_lines(result->stdout_output);

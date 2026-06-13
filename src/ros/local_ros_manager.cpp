@@ -24,8 +24,9 @@ auto LocalRosManager::current_workspace_root() const -> std::string {
 
 auto LocalRosManager::run_command(const std::vector<std::string>& args)
     -> std::expected<std::string, errors::ErrorCode> {
-    auto wrapped = subprocess::wrap_with_ros_setup(current_workspace_root(), args);
-    auto result = executor_.execute(wrapped, 10000);
+    auto ws = current_workspace_root();
+    auto wrapped = subprocess::wrap_with_ros_setup(ws, args);
+    auto result = executor_.execute(wrapped, 10000, ws);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
@@ -362,10 +363,11 @@ auto LocalRosManager::set_param(const models::RosParamSetRequest& req)
         value_str = req.value.dump();
     }
 
+    auto ws = current_workspace_root();
     auto wrapped = subprocess::wrap_with_ros_setup(
-        current_workspace_root(),
+        ws,
         {"ros2", "param", "set", req.node, req.name, value_str});
-    auto result = executor_.execute(wrapped, 10000);
+    auto result = executor_.execute(wrapped, 10000, ws);
     if (!result.has_value()) {
         return std::unexpected(result.error());
     }
